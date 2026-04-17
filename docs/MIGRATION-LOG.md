@@ -66,38 +66,177 @@ Each entry captures:
 - Copied `migration-plan.md` → `docs/MIGRATION-PLAN.md` (unchanged)
 - Initialized this log with Phase 0–3 entries and the pre-flight reassessment
 
+## Phase 4: Simple Helpers (2026-04-17)
+
+Ported two, deleted one.
+
+**Ported:**
+- `Services/NaturalStringComparer.cs` — **rewritten from scratch** as a managed regex-based natural comparer (Regex `\d+|\D+` chunker + ordinal numeric compare with leading-zero tolerance). Replaces `shlwapi.dll StrCmpLogicalW` P/Invoke. Works on all three TFMs.
+- `Converters/NullImageConverter.cs` — namespace swap (`System.Windows.Data` → `Microsoft.UI.Xaml.Data`) and **signature change**: `IValueConverter.Convert`/`ConvertBack` last param is `string language` in WinUI, not `CultureInfo culture` in WPF. Two-line change once the namespaces line up.
+
+**Not ported (decision logged at Phase 0):**
+- `MediaFileServer.cs` — the `HttpListener`-based local proxy was a workaround for WPF `MediaElement` needing a `Uri`. WinUI `MediaPlayerElement` accepts streams directly, and `HttpListener` is unsupported on WASM. Deleted entirely, not ported.
+
+**Pattern for the guide:** `IValueConverter.Convert(value, targetType, parameter, string language)` — the signature change is surprising but mechanical. Add to §2 namespace mapping table.
+
+Build: 0 errors, 13 warnings (unchanged from scaffold).
+
+## Phase 5: MediaViewModel (2026-04-17)
+
+Plain INPC record ported verbatim. Changes: namespace `WpfImageViewer` → `ImageViewerUno.Models`, added nullable annotations on the event and three string props. Enum `VisualStates` moved alongside it.
+
+MVUX refactor (IFeed/IState) explicitly deferred. The model is 4 scalar props — adding MVUX abstraction wouldn't earn its keep. Reassess in polish phase or Slot 2 if the pattern recurs.
+
+Build: 0 errors, 13 warnings.
+
+## Phase 6 + 8 + 9: MainPage, Settings, Keyboard (2026-04-17)
+
+Merged into one commit because the three phases are tightly coupled (settings feed MainPage construction, keyboard is inside MainPage code-behind).
+
+### Settings (§8)
+- `Models/ImageViewerSettings.cs` — record with 12 `init` properties matching the source 12 `Properties.Settings` keys, each with a sane default.
+- `appsettings.json` — added `ImageViewerSettings` section with the same defaults (duplicated, yes, but the record defaults are the fallback when DI isn't wired and the JSON is the normal path).
+- `App.xaml.cs` — added `.Section<ImageViewerSettings>()` to `UseConfiguration`.
+- **MainPage pulls settings** via `(Application.Current as App)?.Host?.Services.GetService(typeof(IOptions<ImageViewerSettings>))`. Had to promote `App.Host` + `App.MainWindow` from `protected` to `public` (build error `CS0122` flagged this).
+
+### View (§6)
+- `MainPage.xaml` — a direct structural port of `MainWindow.xaml`. Window→Page, VSM preserved, three switchable renderers inside a `ContentControl` (stock `Image`, `MediaPlayerElement`, second `Image` for the animated-WebP path).
+- `MainPage.xaml.cs` — all three source constructor overloads ported verbatim (the decision logged at Phase 1). Image loading goes through `StorageFile.GetFileFromPathAsync` + `BitmapImage.SetSourceAsync` with a `file:///` URI fallback. File picker uses `FileOpenPicker` with conditional `WinRT.Interop.InitializeWithWindow.Initialize` on `WINDOWS`. Explorer integration + clipboard gated via inline `OperatingSystem.IsWindows()` check.
+- `App.xaml.cs` — added `AppWindow.SetPresenter(FullScreenPresenter)` inside `#if HAS_UNO || WINDOWS` + try/catch for WASM no-op.
+- `App.xaml` — registered `NullImageConverter` as a `StaticResource` for reference even though MainPage sets `Image.Source` in code-behind (more robust than string-binding across Uno heads).
+
+### Keyboard (§9)
+- Source has no `KeyBinding`/`InputBinding` in XAML — everything goes through `PreviewKeyDown` in code-behind. Migration is mostly a `Key.` → `VirtualKey.` swap plus `Keyboard.Modifiers == ModifierKeys.Alt` → `e.KeyStatus.IsMenuKeyDown`.
+- **OemPlus/OemMinus gotcha:** these VirtualKey enum members do NOT exist. Used raw codes `(VirtualKey)187` and `(VirtualKey)189`.
+
+### Gotchas logged (high-value for guide)
+1. **`Microsoft.Xaml.Behaviors.WinUI.Managed` is WinAppSDK-only**, NOT Uno-cross-platform. Fix: handled VSM transition in code-behind via `MediaViewModel.PropertyChanged` → `VisualStateManager.GoToState`. Alternative: `CommunityToolkit.WinUI.Behaviors` is genuinely cross-platform.
+2. **`Border.ClipToBounds` does not exist in WinUI** — `Border` clips its child by default. Just remove.
+3. **`PointerWheelChanged` uses `PointerRoutedEventArgs`**, there is no `PointerWheelRoutedEventArgs`.
+4. **`KeyRoutedEventArgs.KeyStatus` is NotImplemented on WASM** — `IsMenuKeyDown` returns false, so Alt+arrow keyboard-pan degrades to a no-op on WASM. Acceptable for v1.
+5. **`Application.Exit()` is NotImplemented on WASM** (expected). Wrapped in try/catch.
+
+Build: 0 errors, 19 warnings (3 added for SixLabors.ImageSharp moderate vuln × multi-TFM + 2 Uno0001 NotImplemented warnings on WASM).
+
+## Phase 7: ImageSharp codec replacement (2026-04-17)
+
+The campaign's "native-dep elimination" showcase.
+
+**Deleted entirely** from source:
+- `WebP.cs` (2397 LoC)
+- `AnimatedWebpElement.cs` (313 LoC)
+- `x86/*.dll` + `x64/*.dll` (6 native binaries, ~3 MB)
+
+**Replaced with** (in `ImageViewerUno/Services/`):
+- `AnimatedImageDecoder.cs` (37 LoC) — static: `Image.Load<Bgra32>(stream)` → iterate frames → `CopyPixelDataTo(byte[])` → read frame-duration from GIF/WebP metadata (1/100-sec for GIF → ×10 ms; WebP native ms).
+- `AnimatedImagePlayer.cs` (77 LoC) — instance per Image control: holds a `WriteableBitmap`, `DispatcherTimer` drives frame advance, pushes BGRA into `PixelBuffer.AsStream()` and calls `Invalidate()`.
+
+MainPage calls the player for `.gif` (when `RunAnimatedGifs=true`) and `.webp`. Still images stay on `BitmapImage.SetSourceAsync`.
+
+**Name collision gotcha:** `SixLabors.ImageSharp.Image` collides with `Microsoft.UI.Xaml.Controls.Image` (pulled via global usings). Fully qualify the ImageSharp side at call sites (`SixLabors.ImageSharp.Image.Load<Bgra32>(stream)`).
+
+**Net:** ~2710 LoC of P/Invoke + custom `Canvas` element → 114 LoC of managed code. 3 MB of native DLLs removed. Gains animated-WebP support on macOS, Linux, WebAssembly — features the source app could never have had on Windows alone.
+
+Build: 0 errors, 19 warnings.
+
+## Phase 10: Cross-platform build verification (2026-04-17)
+
+Per-TFM build results:
+
+| TFM | Errors | Warnings | Notes |
+|---|---|---|---|
+| `net10.0-windows10.0.26100` (WinAppSDK) | 0 | 5 | 4 transitive NU1903 + 1 `NETSDK1198` stale publish profile |
+| `net10.0-desktop` (Skia) | 0 | 4 | 4 transitive NU1903 (Tmds.DBus for Linux) |
+| `net10.0-browserwasm` (WASM) | 0 | 4 | 4 transitive NU1903; Uno0001 NotImplemented warnings suppressed for this build, appear in multi-TFM |
+
+Runtime smoke test **deferred to user** — running Uno UI apps in an autonomous agent session would open windows on the user's desktop. Recommended verification commands:
+
+```bash
+dotnet run -f net10.0-windows10.0.26100    # WinAppSDK head
+dotnet run -f net10.0-desktop              # Skia Desktop head
+dotnet run -f net10.0-browserwasm          # WASM — opens in browser
+```
+
+## Phase 11: Uno Material theme (2026-04-17)
+
+No additional work needed. The `-theme material` + `-toolkit` flags on the scaffold pulled in `Uno.Material` + `Uno.Toolkit.UI.Material` + `<utum:MaterialToolkitTheme>` in `App.xaml`. The image viewer's intentional black/image-first aesthetic aligns with Material dark semantics — no lightweight styling overrides needed for v1.
+
+## Phase 12: MIGRATION-GUIDE.md seeded (2026-04-17)
+
+Populated all 9 Slot-1 sections of the cumulative guide with concrete recipes, code snippets, decision frameworks, and gotcha tables. Each section now reads end-to-end as standalone reference material suitable for promotion to the eventual `wpf-to-uno-migration` skill.
+
+Key guide contributions from Slot 1:
+
+- §1 **Project Conversion:** the full `dotnet new unoapp` command used, the "bring/update/drop" file checklist, the bottom-up migration order.
+- §2 **Namespace & API Mapping:** complete `System.Windows.*` → `Microsoft.UI.Xaml.*` table + 6 documented gotchas (ClipToBounds, PointerWheel, KeyStatus on WASM, etc.).
+- §3 **Window → Page & AppWindow:** root-element swap, fullscreen presenter recipe, dialog-mode constructor decision pattern, per-platform window behavior table.
+- §4 **Control Replacements:** the `Microsoft.Xaml.Behaviors.WinUI.Managed` anti-pattern plus 2 alternatives.
+- §5 **Third-Party WPF Library Replacements:** updated the Xaml.Behaviors.Wpf row with the Slot 1 learning.
+- §6 **Platform-Specific API Abstraction:** articulated Level 1 (inline `OperatingSystem.IsWindows()`) vs Level 2 (DI-registered interface) with decision framework.
+- §7 **Native Dependencies:** the "native deps travel in packs" rule + decision-framework flowchart + full case studies for both libwebp and shlwapi replacements.
+- §8 **Settings & Configuration:** 4-step recipe with code for `Properties.Settings` → `IOptions<T>` + `IWritableOptions<T>` + per-platform storage location table.
+- §9 **Input Handling:** 2-column WPF↔Uno translation table, `KeyBinding` vs `KeyboardAccelerator` decision rule, pointer event mapping.
+- §17 **Build & Cross-Platform Validation:** known-benign warnings table, 6 common first-time build errors with fixes, commit-cadence pattern.
+
 ---
 
 ## Recurring Patterns Observed
 
-| Pattern | Description | Frequency | Reusable? |
-|---------|-------------|-----------|-----------|
-| _(populated during migration phases)_ | | | |
+| Pattern | Description | Frequency in Slot 1 | Reusable? |
+|---|---|---|---|
+| Namespace swap with ctor/signature nuance | `System.Windows.Data.IValueConverter` → `Microsoft.UI.Xaml.Data.IValueConverter` changes `CultureInfo culture` to `string language` | 1× (NullImageConverter) | Yes — every converter |
+| Inline `OperatingSystem.IsWindows()` gate for shell integration | Middle-click Explorer reveal stays inline, non-Windows targets silently lose the feature | 1× | Yes — any single-feature Windows-only call |
+| `Application.Current as App → Host → Services` for settings | Service-locator pull of `IOptions<T>` inside code-behind | 1× | Yes — every Page that needs settings |
+| Native-dep replacement via ImageSharp | libwebp P/Invoke → managed codec; shared decode + player services | 2× (WebP + animated GIF use same code path) | Yes — blueprint for any raster format |
+| Code-behind `PropertyChanged` → `VisualStateManager.GoToState` | Replaces single-action Blend behaviors without adding a package | 1× (VSM-driven renderer switch) | Yes — every simple state-switcher |
 
 ---
 
 ## Gotchas and Workarounds
 
 | Issue | Workaround | Root Cause | Reported? |
-|-------|-----------|------------|-----------|
-| Plan underestimated native-dep count (missed `shlwapi` + `gdi32` in addition to `libwebp`) | Log as "native deps travel in packs" — audit *every* `DllImport` in a WPF project during Phase 0 analysis | Migration plan derived from high-level inspection | Yes — will add to MIGRATION-GUIDE Section 7 |
-| `MediaFileServer` `HttpListener` usage not documented in source README | Delete entire service — not needed in WinUI | Purely a WPF `MediaElement` workaround | Yes — will add to MIGRATION-GUIDE Section 4 |
-| `MainWindow` has overloaded constructors for dialog-mode library use | Port signatures verbatim; document `.ShowDialog()` caller pattern has no `Page` equivalent | WPF Windows double as top-level containers and dialog-capable objects | Yes — will add to MIGRATION-GUIDE Section 3 |
+|---|---|---|---|
+| Plan underestimated native-dep count (missed `shlwapi` + `gdi32` in addition to `libwebp`) | Document "native deps travel in packs" — audit every `DllImport`, `using System.Drawing`, `using Microsoft.Win32`, `using System.Configuration` in Phase 0 | Migration plan derived from high-level inspection | Yes — MIGRATION-GUIDE §7 |
+| `MediaFileServer` `HttpListener` proxy (66 LoC) not documented in source README | Delete entire service, not port | Purely a WPF `MediaElement` workaround; not needed with WinUI streams; `HttpListener` is WASM-incompatible | Yes — MIGRATION-GUIDE §4 |
+| `MainWindow` has overloaded constructors for dialog-mode library consumption | Port all three signatures verbatim onto `MainPage`; document that caller-side `.ShowDialog()` has no Page equivalent (use `ContentDialog` if that's needed) | WPF Windows double as top-level containers AND dialog-capable objects; Pages don't | Yes — MIGRATION-GUIDE §3 |
+| `Microsoft.Xaml.Behaviors.WinUI.Managed` 3.0.0 supports only `net8.0-windows10.0.17763` — fails on WASM + Desktop with NU1202 | Replace with code-behind `VisualStateManager.GoToState` (chose for Slot 1 due to single-behavior scenario) or `CommunityToolkit.WinUI.Behaviors` for multi-behavior cases | Microsoft's docs position this package as "the" Uno-compatible replacement, but it's only WinAppSDK | Yes — MIGRATION-GUIDE §4, §5 |
+| `Border.ClipToBounds` does not exist in WinUI | Remove the attribute — Border clips by default | API divergence | Yes — MIGRATION-GUIDE §2 |
+| `PointerWheelChanged` uses `PointerRoutedEventArgs`, not a Wheel-specific subclass | Type the handler parameter as `PointerRoutedEventArgs` | API divergence from WPF `MouseWheelEventArgs` | Yes — MIGRATION-GUIDE §2, §9 |
+| `KeyRoutedEventArgs.KeyStatus` is NotImplemented on WASM (`Uno0001` warning) | Alt-modifier detection degrades to false on WASM; Alt+arrow keyboard pan is a no-op there in v1 | Uno WASM limitation | Yes — MIGRATION-GUIDE §2, §9 |
+| `Application.Current.Exit()` is NotImplemented on WASM | `try { Application.Current.Exit(); } catch { }` | Browser tab cannot self-terminate | Yes — MIGRATION-GUIDE §3 |
+| Scaffold's `App.Host` + `App.MainWindow` are `protected` — inaccessible to Pages | Promote to `public` (or `internal` if same-assembly) | Template default scope | Yes — MIGRATION-GUIDE §17 |
+| `VirtualKey.OemPlus` / `OemMinus` do not exist as named enum members | Use raw key codes `(VirtualKey)187` / `(VirtualKey)189` | WinUI VirtualKey enum doesn't expose OEM codes as named constants | Yes — MIGRATION-GUIDE §9 |
+| `SixLabors.ImageSharp.Image` collides with `Microsoft.UI.Xaml.Controls.Image` (from global usings) | Fully qualify at call sites: `SixLabors.ImageSharp.Image.Load<T>(stream)` | Template `GlobalUsings.cs` pulls in WinUI controls namespace | Yes — MIGRATION-GUIDE §17 |
+| Transitive NU1903 vulns on `System.Security.Cryptography.Xml 10.0.2` + `Tmds.DBus.Protocol 0.21.2` in `unoapp --preset recommended` baseline | Add explicit `<PackageVersion>` overrides in `Directory.Packages.props` during polish phase | Upstream Uno.Sdk 6.5.31 transitive deps | Yes — MIGRATION-GUIDE §17 |
 
 ---
 
 ## What Was Easy
 
-_(populated during migration phases)_
+- Scaffolding. 30-second `dotnet new unoapp` produces a buildable, multi-target project. No post-scaffold TFM stripping needed when `-platforms` is set explicitly.
+- `VisualStateManager` + `Storyboard` XAML. Ported verbatim — same syntax, same semantics.
+- `MediaViewModel` (INPC, 4 props). Copy, namespace-swap, nullable-annotate, done.
+- `NullImageConverter`. Two using-directive swaps + a signature change. Two-minute port.
+- Keyboard. `KeyDown` handler pattern survived intact with mechanical `Key.` → `VirtualKey.` swap.
+- Fullscreen window. Three lines in `App.xaml.cs` replace the WPF `Window.WindowStyle=None + WindowState=Maximized`.
 
 ## What Was Difficult
 
-_(populated during migration phases)_
+- Native-dep elimination. Not technically hard, but requires rewriting the decoder end-to-end (37+77 LoC of managed code replacing 2710 LoC of P/Invoke + custom XAML element). Three separate Windows-only surfaces (libwebp, shlwapi, gdi32) had to be tracked down and replaced.
+- Settings round-trip. Writing values back on first-run from existing `user.config` was skipped (clean-install semantics for Slot 1). Real-world migrations need this.
+- Cross-platform file I/O. `StorageFile.GetFileFromPathAsync` + fallback to `file:///` URI + fallback to `File.ReadAllBytes`. Three layers of fallback needed to cover WinAppSDK / Skia / WASM. The source could just use `Uri`.
+- Behaviors package discovery. The "obvious" replacement (Microsoft.Xaml.Behaviors.WinUI.Managed) doesn't work on Uno. Discovering this took a failed build + targeted error diagnosis.
 
 ## Where WPF Design Helped
 
-_(populated during migration phases)_
+- The source kept the viewmodel INPC-only and thin. A 67-line port was 67 lines in Uno too.
+- The source used `VisualStateManager` + `DataTrigger` rather than inline show/hide logic — VSM ported cleanly, and the single trigger was trivial to replace with code-behind PropertyChanged.
+- `Properties.Settings` with `[DefaultSettingValueAttribute]` defaults gave us a clear data model to translate directly into the settings record's `init` defaults.
+- Code-behind keyboard (not `KeyBinding`) — turned out easier to port than the migration plan assumed.
 
 ## Where WPF Design Hurt
 
-_(populated during migration phases)_
+- 934-line code-behind in `MainWindow.xaml.cs` (zoom, pan, slideshow, key handling, file nav, message overlay, settings read) is a lot to port. MVUX would have split this into 4-5 cleaner records + view-layer reactions. Not worth refactoring during migration; candidate for v2 polish.
+- `MediaFileServer` (the `HttpListener` proxy feeding WPF `MediaElement`) is a Windows-WPF-specific hack. Good example of how WPF-era "workarounds" become cruft in the migrated codebase — identified and dropped entirely rather than ported.
+- `System.Drawing.Bitmap` inside `AnimatedWebpElement`. Three different Windows-only APIs (Bitmap, GDI interop, Imaging.CreateBitmapSourceFromHBitmap) all in one custom Canvas element. Classic "WinForms thinking in WPF" — and all three disappeared in the Uno port along with libwebp.
+- Two P/Invokes in a tiny 19-line helper (`NaturalStringComparer`). Would have been caught by a more paranoid Phase 0 audit, but drives home the point that "small helper" ≠ "cross-platform-safe."
