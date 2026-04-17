@@ -13,8 +13,10 @@
 
     <Border x:Name="ImageBorder" Background="Black">
       <ContentControl x:Name="MediaHost"
-                      Width="{Binding ActualWidth, ElementName=ImageBorder}"
-                      Height="{Binding ActualHeight, ElementName=ImageBorder}"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch"
                       PointerPressed="MediaHost_PointerPressed"
                       PointerMoved="MediaHost_PointerMoved"
                       PointerReleased="MediaHost_PointerReleased">

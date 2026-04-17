@@ -6,6 +6,12 @@ namespace ImageViewerUno;
 public partial class App : Application
 {
     /// <summary>
+    /// Command-line arguments captured by the Desktop head's Program.Main. Empty on platforms
+    /// where Main isn't the entry point (WASM / WinAppSDK activation).
+    /// </summary>
+    public static string[] LaunchArgs { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Initializes the singleton application object. This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().
     /// </summary>
@@ -111,10 +117,9 @@ public partial class App : Application
 
         if (rootFrame.Content == null)
         {
-            // When the navigation stack isn't restored navigate to the first page,
-            // configuring the new page by passing required information as a navigation
-            // parameter
-            rootFrame.Navigate(typeof(MainPage), args.Arguments);
+            // Prefer the Desktop Main() args; fall back to WinUI activation args (WinAppSDK).
+            string navArg = LaunchArgs.Length > 0 ? LaunchArgs[0] : args.Arguments ?? string.Empty;
+            rootFrame.Navigate(typeof(MainPage), navArg);
         }
         // Ensure the current window is active
         MainWindow.Activate();

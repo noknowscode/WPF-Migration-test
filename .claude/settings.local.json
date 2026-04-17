@@ -8,7 +8,8 @@
       "WebFetch(domain:www.nuget.org)",
       "Bash(tasklist)",
       "Bash(taskkill //F //IM ImageViewerUno.exe)",
-      "Bash(taskkill //F //PID 4744)"
+      "Bash(taskkill //F //PID 4744)",
+      "Bash(\"C:/Users/Platform006/OneDrive - Uno Platform/Desktop/unOS/AI-builds/ImageViewerUno/ImageViewerUno/bin/Debug/net10.0-desktop/ImageViewerUno.exe\" \"C:\\\\Users\\\\Platform006\\\\OneDrive - Uno Platform\\\\Desktop\\\\unOS\\\\UnoVault\\\\08-Campaigns\\\\Active\\\\WPF-Migration\\\\landing-page\\\\wpf-page\")"
     ]
   }
 }

@@ -217,17 +217,34 @@ public sealed partial class MainPage : Page
     {
         this.KeyDown += MainPage_KeyDown;
 
-        var args = Environment.GetCommandLineArgs();
-        if (args.Length > 1 && !string.IsNullOrWhiteSpace(args[1]) && (File.Exists(args[1]) || Directory.Exists(args[1])))
+        // Arg resolution priority:
+        // 1. App.LaunchArgs (captured by Desktop Program.Main — reliable on Skia heads)
+        // 2. _directory set via OnNavigatedTo's e.Parameter (WinAppSDK activation path)
+        // 3. Environment.GetCommandLineArgs() last-resort fallback
+        string? candidate = null;
+        if (App.LaunchArgs.Length > 0 && !string.IsNullOrWhiteSpace(App.LaunchArgs[0]))
         {
-            await SetImageAsync(Path.GetFullPath(args[1]));
+            candidate = App.LaunchArgs[0];
         }
         else if (!string.IsNullOrEmpty(_directory))
         {
-            await SetImageAsync(_directory);
+            candidate = _directory;
         }
         else
         {
+            var envArgs = Environment.GetCommandLineArgs();
+            if (envArgs.Length > 1 && !string.IsNullOrWhiteSpace(envArgs[1])) candidate = envArgs[1];
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate) && (File.Exists(candidate) || Directory.Exists(candidate)))
+        {
+            await SetImageAsync(Path.GetFullPath(candidate));
+        }
+        else
+        {
+            ShowMessage(string.IsNullOrWhiteSpace(candidate)
+                ? "No image path provided. Press H for help or double-click to pick a file."
+                : $"Path not found: {candidate}");
             _showHelpOnLoad = true;
         }
 
