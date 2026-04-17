@@ -73,6 +73,8 @@ public sealed partial class MainPage : Page
     private readonly DispatcherTimer _timerSlideshow = new();
 
     private readonly Models.MediaViewModel _mediaViewModel = new();
+    private AnimatedImagePlayer? _animPlayer;
+    private AnimatedImagePlayer? _gifPlayer;
 
     public MainPage()
     {
@@ -257,18 +259,19 @@ public sealed partial class MainPage : Page
 
                 if (isWebp)
                 {
-                    // TODO(Phase 7): decode WebP frames with SixLabors.ImageSharp into WriteableBitmap loop.
-                    // v1: attempt BitmapImage (works for static WebP on some platforms, shows blank otherwise).
-                    await LoadStillImageAsync(imagePath, SwitchableAnim);
+                    // WebP decoded via SixLabors.ImageSharp → BGRA frames → WriteableBitmap loop.
+                    // Replaces source AnimatedWebpElement (Canvas + libwebp P/Invoke + GDI interop).
+                    await LoadAnimatedImageAsync(imagePath, SwitchableAnim, isWebp: true);
                     _mediaViewModel.FilenameAnim = imagePath;
                     _mediaViewModel.FilenameImage = _mediaViewModel.FilenameMedia = null;
                     _mediaViewModel.CurrentVisualState = Models.VisualStates.ShowAnim;
                 }
                 else if (isGif && _runAnimatedGifs)
                 {
-                    // Animated GIFs render via WinUI Image natively; MediaPlayerElement is overkill here.
-                    // Using SwitchableImage for GIFs aligns with WinUI's auto-animation.
-                    await LoadStillImageAsync(imagePath, SwitchableImage);
+                    // Animated GIF decoded via the same ImageSharp path as WebP for codec consistency.
+                    // (WinUI Image auto-animates GIFs, but routing via ImageSharp proves cross-platform
+                    //  codec parity and lets us apply identical frame-pacing on all three heads.)
+                    await LoadAnimatedImageAsync(imagePath, SwitchableImage, isWebp: false);
                     _mediaViewModel.FilenameImage = imagePath;
                     _mediaViewModel.FilenameAnim = _mediaViewModel.FilenameMedia = null;
                     _mediaViewModel.CurrentVisualState = Models.VisualStates.ShowImage;
@@ -316,6 +319,10 @@ public sealed partial class MainPage : Page
 
     private async Task LoadStillImageAsync(string path, Image target)
     {
+        // Stop any animation already running against this target.
+        if (ReferenceEquals(target, SwitchableAnim)) { _animPlayer?.Dispose(); _animPlayer = null; }
+        if (ReferenceEquals(target, SwitchableImage)) { _gifPlayer?.Dispose(); _gifPlayer = null; }
+
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(path);
@@ -333,6 +340,40 @@ public sealed partial class MainPage : Page
             var bmp = new BitmapImage(uri);
             target.Source = bmp;
         }
+    }
+
+    private async Task LoadAnimatedImageAsync(string path, Image target, bool isWebp)
+    {
+        // Read all bytes up-front — ImageSharp needs a seekable stream for animated decoders.
+        byte[] bytes;
+        try
+        {
+            var file = await StorageFile.GetFileFromPathAsync(path);
+            using var s = await file.OpenStreamForReadAsync();
+            using var ms = new MemoryStream();
+            await s.CopyToAsync(ms);
+            bytes = ms.ToArray();
+        }
+        catch
+        {
+            // WASM / sandboxed: fall back to File.ReadAllBytes if the platform allows it.
+            bytes = File.ReadAllBytes(path);
+        }
+
+        ref AnimatedImagePlayer? playerRef = ref isWebp ? ref _animPlayer : ref _gifPlayer;
+        playerRef?.Dispose();
+        playerRef = new AnimatedImagePlayer(target);
+
+        var captured = playerRef;
+        captured.FirstFrameDisplayed += (_, _) =>
+        {
+            _mediaWidth = captured.NaturalImageWidth;
+            _mediaHeight = captured.NaturalImageHeight;
+            SetMaxPanValues();
+        };
+
+        using var decodeStream = new MemoryStream(bytes);
+        captured.Load(decodeStream);
     }
 
     private void LoadFileList(string directoryName)
