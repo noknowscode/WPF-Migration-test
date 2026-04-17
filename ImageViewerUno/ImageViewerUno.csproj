@@ -32,6 +32,9 @@
       UnoFeatures are used to quickly add and manage features enabled for your app.
       https://aka.platform.uno/singleproject-features
     -->
+    <!-- NETSDK1198: 'win-AnyCPU.pubxml' is a phantom publish profile inferred by Microsoft.NET.Publish.targets when no PublishProfile is set. Cosmetic only. -->
+    <NoWarn>$(NoWarn);NETSDK1198</NoWarn>
+
     <UnoFeatures>
       Material;
       Dsp;
@@ -50,6 +53,18 @@
 
   <ItemGroup>
     <PackageReference Include="SixLabors.ImageSharp" />
+    <!-- Explicit transitive upgrade to clear NU1903 (see Directory.Packages.props). -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Tmds.DBus.Protocol is a transitive dep of the Skia Desktop stack (needed for Linux).
+      Advisory GHSA-xrw6-gwf8-vvr9 is not fixed in any published version as of 2026-04-17;
+      suppress the targeted advisory rather than broad NU1903 to keep other vuln warnings visible.
+      Re-evaluate when the upstream fix ships.
+    -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-xrw6-gwf8-vvr9" />
   </ItemGroup>
 
 </Project>

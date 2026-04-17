@@ -2,5 +2,13 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "env": {
     "DOTNET_ENVIRONMENT": "Development"
+  },
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.nuget.org)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //IM ImageViewerUno.exe)",
+      "Bash(taskkill //F //PID 4744)"
+    ]
   }
 }
