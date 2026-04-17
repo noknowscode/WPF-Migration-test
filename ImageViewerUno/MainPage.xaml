@@ -1,19 +1,142 @@
-﻿<Page x:Class="ImageViewerUno.MainPage"
+<Page x:Class="ImageViewerUno.MainPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:ImageViewerUno"
-      xmlns:utu="using:Uno.Toolkit.UI"
-      xmlns:um="using:Uno.Material"
-      Background="{ThemeResource BackgroundBrush}">
-  <ScrollViewer IsTabStop="True">
-    <Grid utu:SafeArea.Insets="VisibleBounds">
-      <StackPanel
-        HorizontalAlignment="Center"
-        VerticalAlignment="Center">
-        <TextBlock AutomationProperties.AutomationId="HelloTextBlock"
-          Text="Hello Uno Platform!"
-          HorizontalAlignment="Center" />
-      </StackPanel>
-    </Grid>
-  </ScrollViewer>
+      Loaded="MainPage_Loaded"
+      Background="Black">
+
+  <Grid x:Name="RootGrid"
+        PointerPressed="RootGrid_PointerPressed"
+        PointerWheelChanged="RootGrid_PointerWheelChanged"
+        Background="Black">
+
+    <Border x:Name="ImageBorder" Background="Black">
+      <ContentControl x:Name="MediaHost"
+                      Width="{Binding ActualWidth, ElementName=ImageBorder}"
+                      Height="{Binding ActualHeight, ElementName=ImageBorder}"
+                      PointerPressed="MediaHost_PointerPressed"
+                      PointerMoved="MediaHost_PointerMoved"
+                      PointerReleased="MediaHost_PointerReleased">
+        <Grid>
+          <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="SwitchableStates">
+              <VisualState x:Name="ShowImage">
+                <Storyboard>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableImage" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Visible</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableMedia" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableAnim" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                </Storyboard>
+              </VisualState>
+              <VisualState x:Name="ShowMedia">
+                <Storyboard>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableImage" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableMedia" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Visible</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableAnim" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                </Storyboard>
+              </VisualState>
+              <VisualState x:Name="ShowAnim">
+                <Storyboard>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableImage" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableMedia" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                  <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SwitchableAnim" Storyboard.TargetProperty="Visibility" Duration="0">
+                    <DiscreteObjectKeyFrame KeyTime="0">
+                      <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Visible</Visibility>
+                      </DiscreteObjectKeyFrame.Value>
+                    </DiscreteObjectKeyFrame>
+                  </ObjectAnimationUsingKeyFrames>
+                </Storyboard>
+              </VisualState>
+            </VisualStateGroup>
+          </VisualStateManager.VisualStateGroups>
+
+          <Image x:Name="SwitchableImage"
+                 Stretch="Uniform"
+                 Visibility="Visible" />
+          <MediaPlayerElement x:Name="SwitchableMedia"
+                              Stretch="Uniform"
+                              AutoPlay="True"
+                              AreTransportControlsEnabled="False"
+                              Visibility="Collapsed" />
+          <Image x:Name="SwitchableAnim"
+                 Stretch="Uniform"
+                 Visibility="Collapsed" />
+        </Grid>
+      </ContentControl>
+    </Border>
+
+    <TextBlock x:Name="MessageLabel"
+               Margin="10,0,10,10"
+               VerticalAlignment="Bottom"
+               HorizontalAlignment="Left"
+               FontSize="16"
+               FontWeight="SemiBold"
+               Foreground="LimeGreen"
+               Visibility="Collapsed"
+               TextWrapping="NoWrap">
+      <TextBlock.TextTrimming>CharacterEllipsis</TextBlock.TextTrimming>
+    </TextBlock>
+
+    <Border x:Name="HelpPanel"
+            Background="#99002020"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Center"
+            Padding="24,20,24,20"
+            CornerRadius="4"
+            Visibility="Collapsed">
+      <TextBlock x:Name="HelpText"
+                 FontSize="14"
+                 FontWeight="SemiBold"
+                 Foreground="White"
+                 LineHeight="20" />
+    </Border>
+  </Grid>
 </Page>

@@ -14,8 +14,8 @@ public partial class App : Application
         this.InitializeComponent();
     }
 
-    protected Window? MainWindow { get; private set; }
-    protected IHost? Host { get; private set; }
+    public Window? MainWindow { get; private set; }
+    public IHost? Host { get; private set; }
 
     [SuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Uno.Extensions APIs are used in a way that is safe for trimming in this template context.")]
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -60,6 +60,7 @@ public partial class App : Application
                     configBuilder
                         .EmbeddedSource<App>()
                         .Section<AppConfig>()
+                        .Section<ImageViewerSettings>()
                 )
                 // Enable localization (see appsettings.json for supported languages)
                 .UseLocalization()
@@ -82,6 +83,18 @@ public partial class App : Application
         MainWindow.UseStudio();
 #endif
                 MainWindow.SetWindowIcon();
+
+#if HAS_UNO || WINDOWS
+        // Apply fullscreen presenter — replaces WPF Window.WindowStyle=None + WindowState=Maximized
+        try
+        {
+            MainWindow.AppWindow?.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
+        }
+        catch
+        {
+            // Presenter not supported on this platform (e.g. WASM) — no-op.
+        }
+#endif
 
         Host = builder.Build();
 

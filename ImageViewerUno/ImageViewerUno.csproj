@@ -48,4 +48,8 @@
     </UnoFeatures>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" />
+  </ItemGroup>
+
 </Project>
