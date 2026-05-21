@@ -1,0 +1,33 @@
+<Project ToolsVersion="15.0">
+  <!--
+    To update the version of Uno, you should instead update the Sdk version in the global.json file.
+
+    See https://aka.platform.uno/using-uno-sdk for more information.
+    See https://aka.platform.uno/using-uno-sdk#implicit-packages for more information regarding the Implicit Packages.
+  -->
+  <ItemGroup>
+    <!-- Slot 2 additions: DataGrid + MVVM toolkit + AdvancedCollectionView for sort/filter. -->
+    <!--
+      Note: the 8.x Microsoft Community Toolkit never ported DataGrid to WinUI 3.
+      Uno Platform maintains its own fork at version 7.1.205 that works on all Uno heads.
+    -->
+    <PackageVersion Include="Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.205" />
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Collections" Version="8.2.251219" />
+
+    <!--
+      Explicit override of transitive packages to clear NU1903 advisories
+      surfaced by the Uno.Sdk 6.5.31 baseline (confirmed Slot 1, same in Slot 2).
+        * System.Security.Cryptography.Xml: 10.0.2 → 10.0.6 (fixes GHSA-37gx-xxp4-5rgx + GHSA-w3x6-4m5h-cxqf)
+    -->
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.6" />
+  </ItemGroup>
+
+  <!--
+    Tmds.DBus.Protocol 0.21.2 carries GHSA-xrw6-gwf8-vvr9 with no patched version available upstream
+    (needed by Uno Skia Desktop on Linux). Suppress the audit until upstream publishes a fix.
+  -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-xrw6-gwf8-vvr9" />
+  </ItemGroup>
+</Project>

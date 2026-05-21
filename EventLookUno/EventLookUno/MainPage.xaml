@@ -1,0 +1,211 @@
+<Page x:Class="EventLookUno.MainPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:EventLookUno"
+      xmlns:vm="using:EventLookUno.Presentation"
+      xmlns:model="using:EventLookUno.Models"
+      xmlns:conv="using:EventLookUno.Converters"
+      xmlns:utu="using:Uno.Toolkit.UI"
+      xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
+      Background="{ThemeResource BackgroundBrush}">
+
+  <Page.Resources>
+    <conv:EventLevelToDisplayTextConverter x:Key="LevelText" />
+    <conv:EventLevelToGlyphConverter x:Key="LevelGlyph" />
+    <conv:EventLevelToBrushConverter x:Key="LevelBrush" />
+    <conv:NewLoadedToBrushConverter x:Key="NewLoadedBrush" />
+    <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
+  </Page.Resources>
+
+  <Page.KeyboardAccelerators>
+    <KeyboardAccelerator Key="F5" Modifiers="None" Invoked="OnRefreshAccelerator" />
+    <!-- TODO(phase-7): Ctrl+L / Ctrl+O / Ctrl+S wire up to their dialog commands once the
+         ContentDialog secondary-window conversion lands. -->
+  </Page.KeyboardAccelerators>
+
+  <Grid utu:SafeArea.Insets="VisibleBounds">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />  <!-- MenuBar -->
+      <RowDefinition Height="Auto" />  <!-- Toolbar (source / range / pickers / refresh) -->
+      <RowDefinition Height="*" />     <!-- DataGrid -->
+      <RowDefinition Height="Auto" />  <!-- Status bar (replaces WPF StatusBar) -->
+    </Grid.RowDefinitions>
+
+    <!-- MenuBar — replaces the WPF Menu/MenuItem tree.
+         InputGestureText isn't a WinUI MenuFlyoutItem property; KeyboardAccelerator shortcut hints
+         render automatically next to the item text. -->
+    <MenuBar Grid.Row="0">
+      <MenuBarItem Title="File">
+        <MenuFlyoutItem Text="Refresh" Click="OnRefreshAccelerator">
+          <MenuFlyoutItem.KeyboardAccelerators>
+            <KeyboardAccelerator Key="F5" />
+          </MenuFlyoutItem.KeyboardAccelerators>
+        </MenuFlyoutItem>
+        <MenuFlyoutItem Text="Open .evtx File…" IsEnabled="False"/>  <!-- TODO(phase-7) -->
+        <MenuFlyoutItem Text="Open Event Log on Local Computer…" IsEnabled="False"/>  <!-- TODO(phase-7) -->
+        <MenuFlyoutItem Text="Export to CSV…" IsEnabled="False"/>    <!-- TODO(phase-8) -->
+        <MenuFlyoutSeparator />
+        <MenuFlyoutItem Text="Launch Windows Event Viewer"
+                        Command="{Binding LaunchEventViewerCommand}" />
+        <MenuFlyoutSeparator />
+        <MenuFlyoutItem Text="Exit" Click="OnExitClicked" />
+      </MenuBarItem>
+      <MenuBarItem Title="Options">
+        <ToggleMenuFlyoutItem Text="Auto Refresh"
+                              IsChecked="{Binding IsAutoRefreshEnabled, Mode=TwoWay}" />
+      </MenuBarItem>
+      <MenuBarItem Title="Help">
+        <MenuFlyoutItem Text="Visit GitHub repo"
+                        Command="{Binding OpenGitHubCommand}" />
+        <MenuFlyoutItem Text="About EventLookUno" IsEnabled="False"/>  <!-- TODO(phase-7) -->
+      </MenuBarItem>
+    </MenuBar>
+
+    <!-- Toolbar: source picker + time-range picker + refresh button -->
+    <Grid Grid.Row="1" Margin="10,6,10,6">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ComboBox Header="Log source"
+                  MinWidth="220"
+                  ItemsSource="{Binding LogSources}"
+                  SelectedItem="{Binding SelectedLogSource, Mode=TwoWay}"
+                  DisplayMemberPath="DisplayName" />
+
+        <ComboBox Header="Range"
+                  MinWidth="120"
+                  ItemsSource="{Binding Ranges}"
+                  SelectedItem="{Binding SelectedRange, Mode=TwoWay}"
+                  DisplayMemberPath="Text" />
+
+        <!-- TODO(phase-6): custom DateTimePickerComposite replacement for xctk:DateTimePicker.
+             Using CalendarDatePicker standalone for now; time component defers to phase 6. -->
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" Spacing="4">
+          <TextBlock Text="From" VerticalAlignment="Center" />
+          <CalendarDatePicker Date="{Binding FromDateTime, Mode=TwoWay}"
+                              IsEnabled="{Binding SelectedRange.IsCustom}" />
+          <TextBlock Text="To" VerticalAlignment="Center" />
+          <CalendarDatePicker Date="{Binding ToDateTime, Mode=TwoWay}"
+                              IsEnabled="{Binding SelectedRange.IsCustom}" />
+        </StackPanel>
+
+        <Button Command="{Binding RefreshCommand}"
+                ToolTipService.ToolTip="Refresh (F5)"
+                VerticalAlignment="Bottom">
+          <FontIcon Glyph="" FontFamily="Segoe MDL2 Assets" />
+        </Button>
+
+        <Button Command="{Binding CancelCommand}"
+                ToolTipService.ToolTip="Cancel (Shift+F5)"
+                VerticalAlignment="Bottom">
+          <FontIcon Glyph="" FontFamily="Segoe MDL2 Assets" />
+        </Button>
+
+        <TextBox Header="Event ID filter"
+                 Text="{Binding IdFilter.FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 PlaceholderText="e.g. 1000, -16"
+                 MinWidth="120" />
+
+        <TextBox Header="Message contains"
+                 Text="{Binding MsgFilter.MessageFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 PlaceholderText="text | other text | -exclude"
+                 MinWidth="240" />
+
+        <Button Content="Reset filters"
+                Command="{Binding ResetFiltersCommand}"
+                VerticalAlignment="Bottom" />
+      </StackPanel>
+    </Grid>
+
+    <!--
+      DataGrid (Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid 7.1.205).
+      ItemsSource: AdvancedCollectionView on the VM exposing live-shaped filter + sort.
+
+      Notes for the guide (Slot 2 §4):
+      * AutoGenerateColumns=False mirrors WPF.
+      * GridLinesVisibility/HeadersVisibility map verbatim from WPF names.
+      * CanUserSortColumns=True + ACV SortDescriptions on the VM gives live sort without
+        any row-level glue. Click a header; AdvancedCollectionView handles the rest.
+      * Filtering is handed to the VM via ACV.Filter = ComposedFilter predicate.
+        Changes on FilterBase.FilterUpdated call acv.RefreshFilter().
+      * RowBackground via LoadingRow code-behind — WinUI has no DataTrigger, so the
+        `IsNewLoaded == true → Yellow` row highlight is wired up in MainPage.xaml.cs.
+    -->
+    <controls:DataGrid x:Name="EventsGrid"
+                       Grid.Row="2"
+                       Margin="10,0,10,0"
+                       ItemsSource="{Binding FilteredEvents}"
+                       SelectedItem="{Binding SelectedEventEntry, Mode=TwoWay}"
+                       AutoGenerateColumns="False"
+                       CanUserSortColumns="True"
+                       CanUserResizeColumns="True"
+                       CanUserReorderColumns="True"
+                       IsReadOnly="True"
+                       GridLinesVisibility="Horizontal"
+                       HeadersVisibility="Column"
+                       SelectionMode="Extended"
+                       LoadingRow="OnLoadingRow">
+      <controls:DataGrid.Columns>
+
+        <!-- TODO(phase-8): bind Visibility to ShowsRecordId via a BoolToVisibilityConverter.
+             WinUI doesn't auto-convert bool->Visibility like WPF; removing the binding for v1. -->
+        <controls:DataGridTextColumn Header="Record ID"
+                                     Binding="{Binding RecordId}"
+                                     IsReadOnly="True" />
+
+        <controls:DataGridTextColumn Header="Time"
+                                     Binding="{Binding TimeOfEvent}"
+Width="180" />
+
+        <controls:DataGridTextColumn Header="Provider"
+                                     Binding="{Binding ProviderName}"
+                                     Width="220" />
+
+        <!--
+          Level column: glyph + text template. The source used a per-row DataTemplate
+          with an Image + TextBlock; we use a FontIcon (Segoe MDL2) driven by a converter,
+          which removes the 6 native PNG assets and one StaticResource ImageConverter.
+        -->
+        <!-- DataGridTemplateColumn has no Binding, so sort won't work on it automatically.
+             TODO(phase-8): add a click-header handler that calls AdvancedCollectionView.SortDescriptions
+             directly to enable sort on the Level column. -->
+        <controls:DataGridTemplateColumn Header="Level" Width="120">
+          <controls:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="model:EventEntry">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6" Margin="8,0">
+                <FontIcon Glyph="{x:Bind Level, Mode=OneWay, Converter={StaticResource LevelGlyph}}"
+                          Foreground="{x:Bind Level, Mode=OneWay, Converter={StaticResource LevelBrush}}"
+                          FontFamily="Segoe MDL2 Assets"
+                          FontSize="14" />
+                <TextBlock Text="{x:Bind Level, Mode=OneWay, Converter={StaticResource LevelText}}" />
+              </StackPanel>
+            </DataTemplate>
+          </controls:DataGridTemplateColumn.CellTemplate>
+        </controls:DataGridTemplateColumn>
+
+        <controls:DataGridTextColumn Header="Event ID"
+                                     Binding="{Binding Id}"
+                                     Width="90" />
+
+        <controls:DataGridTextColumn Header="Message"
+                                     Binding="{Binding MessageOneLine}"
+                                     Width="*" />
+
+      </controls:DataGrid.Columns>
+    </controls:DataGrid>
+
+    <!--
+      Status bar: WinUI has no StatusBar control, so this is a simple Grid row.
+      WPF used two MultiBinding converters here (StatusTextConverter + FilterInfoTextConverter).
+      WinUI has no IMultiValueConverter; the VM exposes StatusText and FilterInfoText as
+      computed properties and raises PropertyChanged when their dependencies change.
+      See MIGRATION-GUIDE §2 (new 'MultiBinding' gotcha).
+    -->
+    <Grid Grid.Row="3" Padding="10,6" Background="{ThemeResource SystemChromeLowColor}">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <TextBlock Text="{Binding StatusText}" />
+        <TextBlock Text="{Binding FilterInfoText}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Page>

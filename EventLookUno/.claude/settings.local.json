@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "DOTNET_ENVIRONMENT": "Development"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /c/Users/Platform006/AppData/Local/Temp/wpf-mig-1779390877/EventLookUno)",
+      "Bash(rsync -a --exclude=.git --exclude=bin --exclude=obj --exclude=.vs --exclude=node_modules --exclude=*.user --exclude=*.suo --exclude=.env '/c/Users/Platform006/OneDrive - Uno Platform/Desktop/unOS/AI-builds/EventLookUno/' /c/Users/Platform006/AppData/Local/Temp/wpf-mig-1779390877/EventLookUno/)",
+      "Read(//c/Users/Platform006/AppData/Local/Temp/wpf-mig-1779390877/**)"
+    ]
+  }
+}

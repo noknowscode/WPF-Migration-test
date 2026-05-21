@@ -1,0 +1,10 @@
+{
+  "background_color": "#ffffff",
+  "description": "EventLookUno",
+  "display": "standalone",
+  "name": "EventLookUno",
+  "short_name": "EventLookUno",
+  "start_url": "/index.html",
+  "theme_color": "#ffffff",
+  "scope": "/"
+}

@@ -1,0 +1,71 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <!--
+      Slot 2 decision: dropped 'net10.0-windows10.0.26100' (WinAppSDK) from the TFM set.
+      Reason: Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid 7.1.205 is Uno-native
+      (targets Uno's UWP-compat surface). Microsoft's WinAppSDK XamlCompiler rejects it
+      with MSB3073 (exit 1, silent). No WinAppSDK-compatible DataGrid package with WCT
+      semantics currently exists. EventLookUno targets Desktop (Skia) + WebAssembly —
+      Desktop runs on Windows too, so the live event log feature is not lost: WindowsEventSource
+      uses runtime OperatingSystem.IsWindows() gating instead of compile-time #if WINDOWS.
+      See docs/MIGRATION-LOG.md Phase 5 and MIGRATION-GUIDE §4 DataGrid section.
+    -->
+    <TargetFrameworks>net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
+
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+
+    <!-- Display name -->
+    <ApplicationTitle>EventLookUno</ApplicationTitle>
+    <!-- App Identifier -->
+    <ApplicationId>com.unoplatform.eventlook</ApplicationId>
+    <!-- Versions -->
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <!-- Package Publisher -->
+    <ApplicationPublisher>EventLookUno</ApplicationPublisher>
+    <!-- Package Description -->
+    <Description>EventLookUno powered by Uno Platform.</Description>
+    <!--
+      If you encounter this error message:
+
+        error NETSDK1148: A referenced assembly was compiled using a newer version of Microsoft.Windows.SDK.NET.dll.
+        Please update to a newer .NET SDK in order to reference this assembly.
+
+      This means that the two packages below must be aligned with the "build" version number of
+      the "Microsoft.Windows.SDK.BuildTools" package above, and the "revision" version number
+      must be the highest found in https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref.
+    -->
+    <!-- <WindowsSdkPackageVersion>10.0.22621.28</WindowsSdkPackageVersion> -->
+
+    <!--
+      UnoFeatures are used to quickly add and manage features enabled for your app.
+      https://aka.platform.uno/singleproject-features
+    -->
+    <UnoFeatures>
+      Material;
+      Dsp;
+      Hosting;
+      Toolkit;
+      Logging;
+      MVUX;
+      Configuration;
+      HttpKiota;
+      Serialization;
+      Localization;
+      ThemeService;
+      SkiaRenderer;
+    </UnoFeatures>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Slot 2 migration additions. Versions managed centrally in ../Directory.Packages.props. -->
+    <PackageReference Include="Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="CommunityToolkit.WinUI.Collections" />
+
+    <!-- Transitive vuln patch — required to clear NU1903 from the recommended preset (Slot 1 precedent). -->
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+
+</Project>
