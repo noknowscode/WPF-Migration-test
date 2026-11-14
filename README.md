@@ -1,3 +1,5 @@
+> **Moved to uno-lab.** This project now lives in the `WPF-Migration-test/` folder of [noknowscode/uno-lab](https://github.com/noknowscode/uno-lab/tree/main/WPF-Migration-test) (private). This repository is archived and kept for its history.
+
 # WPF-Migration-test
 
 Parent repo hosting test projects from the **unOS WPF → Uno Platform migration campaign**.
